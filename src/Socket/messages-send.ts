@@ -1,3 +1,4 @@
+import { getContentType, normalizeMessageContent } from "../Utils/messages"
 import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto/index.js'
@@ -640,6 +641,30 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 			if (additionalNodes && additionalNodes.length > 0) {
 				;(stanza.content as BinaryNode[]).push(...additionalNodes)
+			}
+
+			// Inject bizNode for buttons/interactive/list messages
+			const contentType = getContentType(normalizeMessageContent(message))
+			if ((isJidGroup(destinationJid) || isJidUser(destinationJid)) && 
+			    (contentType === 'interactiveMessage' || 
+			     contentType === 'buttonsMessage' || 
+			     contentType === 'listMessage')) {
+				const bizNode: BinaryNode = {
+					tag: 'biz',
+					attrs: {},
+					content: [{
+						tag: 'interactive',
+						attrs: {
+							type: 'native_flow',
+							v: '1'
+						},
+						content: [{
+							tag: 'native_flow',
+							attrs: { v: '9', name: 'mixed' }
+						}]
+					}]
+				}
+				;(stanza.content as BinaryNode[]).push(bizNode)
 			}
 
 			logger.debug({ msgId }, `sending message to ${participants.length} devices`)
