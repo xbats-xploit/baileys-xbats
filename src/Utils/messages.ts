@@ -207,9 +207,25 @@ export const prepareWAMessageMedia = async (
 		(mediaType === 'image' || mediaType === 'video') && typeof uploadData['jpegThumbnail'] === 'undefined'
 	const requiresWaveformProcessing = mediaType === 'audio' && uploadData.ptt === true
 	const requiresAudioBackground = options.backgroundColor && mediaType === 'audio' && uploadData.ptt === true
+	
+	// Auto-convert audio to Opus OGG for PTT (voice notes)
+	let processedMedia = uploadData.media
+	if (mediaType === 'audio' && uploadData.ptt === true && uploadData.mimetype !== 'audio/ogg; codecs=opus') {
+		try {
+			const { convertAudioToOpus } = await import('./audio-converter')
+			// Only convert if media is Buffer or string path
+			if (typeof processedMedia === 'string' || Buffer.isBuffer(processedMedia)) {
+				processedMedia = await convertAudioToOpus(processedMedia, logger)
+				uploadData.mimetype = 'audio/ogg; codecs=opus'
+			}
+		} catch (err) {
+			logger?.warn({ err }, 'Audio conversion failed, using original')
+		}
+	}
+	
 	const requiresOriginalForSomeProcessing = requiresDurationComputation || requiresThumbnailComputation
 	const { mediaKey, encFilePath, originalFilePath, fileEncSha256, fileSha256, fileLength } = await encryptedStream(
-		uploadData.media,
+		processedMedia,
 		options.mediaTypeOverride || mediaType,
 		{
 			logger,
@@ -535,6 +551,12 @@ export const generateWAMessageContent = async (
 		m.requestPhoneNumberMessage = {}
 	} else {
 		m = await prepareWAMessageMedia(message, options)
+	}
+
+	// Compatibility layer: convert legacy buttons to buttonsMessage
+	if ('buttons' in message || 'templateButtons' in message) {
+		const { convertLegacyButtons } = await import('./messages-compat')
+		m = convertLegacyButtons(message, m)
 	}
 
 	if ('viewOnce' in message && !!message.viewOnce) {
