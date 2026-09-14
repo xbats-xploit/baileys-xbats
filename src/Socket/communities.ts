@@ -18,10 +18,12 @@ import {
 	jidNormalizedUser
 } from '../WABinary'
 import { makeBusinessSocket } from './business'
+import { makeNewsletterSocket } from './newsletter'
 
 export const makeCommunitiesSocket = (config: SocketConfig) => {
 	const sock = makeBusinessSocket(config)
 	const { authState, ev, query, upsertMessage } = sock
+	const newsletterSocket = makeNewsletterSocket(sock)
 
 	const communityQuery = async (jid: string, type: 'get' | 'set', content: BinaryNode[]) =>
 		query({
