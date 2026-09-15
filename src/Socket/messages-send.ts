@@ -70,6 +70,25 @@ import {
 import { USyncQuery, USyncUser } from '../WAUSync'
 import { makeNewsletterSocket } from './newsletter'
 
+
+const getInteractiveNodes = (jid: string, message: proto.IMessage): BinaryNode[] => {
+	const isGroup = isJidGroup(jid)
+	const nodes: BinaryNode[] = []
+	nodes.push({
+		tag: 'biz',
+		attrs: { type: 'interactive' },
+		content: []
+	})
+	if (!isGroup) {
+		nodes.push({
+			tag: 'bot',
+			attrs: { biz_bot: '1' },
+			content: []
+		})
+	}
+	return nodes
+}
+
 export const makeMessagesSocket = (config: SocketConfig) => {
 	const {
 		logger,
@@ -687,7 +706,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					attrs: {},
 					content: bytes
 				})
-				const stanza: BinaryNode = {
+						// --- BizNode Patch Start ---
+		if ((message as any).interactiveMessage || (message as any).nativeFlowMessage) {
+			const interactiveNodes = getInteractiveNodes(jid, message)
+			additionalNodes = [...(additionalNodes || []), ...interactiveNodes]
+		}
+		// --- BizNode Patch End ---
+const stanza: BinaryNode = {
 					tag: 'message',
 					attrs: {
 						to: jid,
@@ -1326,6 +1351,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			return message
 		},
 		sendMessage: async (jid: string, content: AnyMessageContent, options: MiscMessageGenerationOptions = {}) => {
+		if (!jid || typeof jid !== 'string') throw new Boom('Invalid JID', { statusCode: 400 })
 			const userJid = authState.creds.me!.id
 			if (
 				typeof content === 'object' &&

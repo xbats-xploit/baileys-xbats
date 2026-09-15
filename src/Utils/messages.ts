@@ -1,3 +1,4 @@
+import { normalizeToInteractiveMessage } from './interactive'
 import { Boom } from '@hapi/boom'
 import { randomBytes } from 'crypto'
 import { promises as fs } from 'fs'
@@ -392,11 +393,11 @@ function hasOptionalProperty<T, K extends PropertyKey>(obj: T, key: K): obj is W
 	return typeof obj === 'object' && obj !== null && key in obj && (obj as any)[key] !== null
 }
 
-export const generateWAMessageContent = async (
-	message: AnyMessageContent,
-	options: MessageContentGenerationOptions
-) => {
-	let m: WAMessageContent = {}
+export const generateWAMessageContent = async (message: any, options: MessageContentGenerationOptions) => {		let m: WAMessageContent = {}
+    const interactive = normalizeToInteractiveMessage(message)
+    if (interactive) {
+        m.interactiveMessage = interactive
+    }
 	if (hasNonNullishProperty(message, 'text')) {
 		const extContent = { text: message.text } as WATextMessage
 

@@ -257,6 +257,21 @@ export type AnyRegularMessageContent = (
 			location: WALocationMessage
 	  }
 	| { react: proto.Message.IReactionMessage }
+	| ({
+			text?: string
+			caption?: string
+			title?: string
+			footer?: string
+			interactiveButtons?: {
+				name: string
+				buttonParamsJson: string
+			}[]
+			buttons?: any[]
+			sections?: any[]
+			buttonText?: string
+	  } & Mentionable &
+			Contextable &
+			Editable)
 	| {
 			buttonReply: ButtonReplyInfo
 			type: 'template' | 'plain'
