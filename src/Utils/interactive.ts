@@ -1,6 +1,7 @@
 import { proto } from '../../WAProto/index.js'
-import type { AnyMessageContent } from '../Types'
+import type { MessageContentGenerationOptions } from '../Types'
 
+// ... Keep existing interfaces ...
 export interface InteractiveButtonRow {
 	header?: string
 	title: string
@@ -44,9 +45,14 @@ export interface InteractiveMessageContent {
 }
 
 /**
- * Normalizes various legacy and modern button input shapes into a modern InteractiveMessage
+ * Normalizes various legacy and modern button input shapes into a modern InteractiveMessage.
+ * If media (image/video/document) is attached, it uploads it and puts it in the header.
  */
-export function normalizeToInteractiveMessage(content: any): proto.Message.IInteractiveMessage | null {
+export async function normalizeToInteractiveMessage(
+	content: any, 
+	options: MessageContentGenerationOptions,
+	prepareMediaCb: (msg: any, opts: any) => Promise<proto.Message>
+): Promise<proto.Message.IInteractiveMessage | null> {
 	if (!content || typeof content !== 'object') {
 		return null
 	}
@@ -62,7 +68,7 @@ export function normalizeToInteractiveMessage(content: any): proto.Message.IInte
 			})
 		}
 	}
-	// 2. Legacy buttons with nativeFlowInfo (as used in case.js for .xmenu)
+	// 2. Legacy buttons with nativeFlowInfo
 	else if (Array.isArray(content.buttons)) {
 		for (const btn of content.buttons) {
 			if (btn.nativeFlowInfo) {
@@ -85,7 +91,7 @@ export function normalizeToInteractiveMessage(content: any): proto.Message.IInte
 			}
 		}
 	}
-	// 3. Legacy listMessage / sections (single_select equivalent)
+	// 3. Legacy sections (single_select equivalent)
 	else if (Array.isArray(content.sections)) {
 		const singleSelectParams: SingleSelectParams = {
 			title: content.buttonText || content.title || 'Select Option',
@@ -110,6 +116,7 @@ export function normalizeToInteractiveMessage(content: any): proto.Message.IInte
 		return null
 	}
 
+	// Build the base interactive message
 	const bodyText = content.text || content.caption || content.body || ''
 	const interactiveMsg: proto.Message.IInteractiveMessage = {
 		body: {
@@ -126,6 +133,26 @@ export function normalizeToInteractiveMessage(content: any): proto.Message.IInte
 			messageVersion: 3
 		},
 		contextInfo: content.contextInfo || undefined
+	}
+
+	// Handle media attachments for Interactive Message Header
+	const hasMedia = content.image || content.video || content.document
+	if (hasMedia && prepareMediaCb) {
+		const mediaMessage = await prepareMediaCb(content, options)
+		
+		if (!interactiveMsg.header) {
+			interactiveMsg.header = { hasMediaAttachment: true }
+		} else {
+			interactiveMsg.header.hasMediaAttachment = true
+		}
+
+		if (mediaMessage.imageMessage) {
+			interactiveMsg.header.imageMessage = mediaMessage.imageMessage
+		} else if (mediaMessage.videoMessage) {
+			interactiveMsg.header.videoMessage = mediaMessage.videoMessage
+		} else if (mediaMessage.documentMessage) {
+			interactiveMsg.header.documentMessage = mediaMessage.documentMessage
+		}
 	}
 
 	return interactiveMsg

@@ -1,4 +1,5 @@
 import { normalizeToInteractiveMessage } from './interactive'
+import { convertAudioToPTT } from './audio-converter'
 import { Boom } from '@hapi/boom'
 import { randomBytes } from 'crypto'
 import { promises as fs } from 'fs'
@@ -221,6 +222,22 @@ export const prepareWAMessageMedia = async (
 		return obj
 	}
 
+
+	// PTT Audio Conversion: if ptt:true and not already ogg/opus, convert via ffmpeg
+	if (mediaType === 'audio' && uploadData.ptt === true) {
+		const currentMime = uploadData.mimetype || ''
+		if (!currentMime.includes('ogg') && !currentMime.includes('opus')) {
+			const rawBuffer = typeof uploadData.media === 'object' && 'buffer' in (uploadData.media as any)
+				? (uploadData.media as any).buffer
+				: Buffer.isBuffer(uploadData.media) ? uploadData.media : undefined
+			if (rawBuffer) {
+				const ext = currentMime.split('/')[1] || 'mp3'
+				uploadData.media = await convertAudioToPTT(rawBuffer, ext)
+				uploadData.mimetype = 'audio/ogg; codecs=opus'
+			}
+		}
+	}
+
 	const requiresDurationComputation = mediaType === 'audio' && typeof uploadData.seconds === 'undefined'
 	const requiresThumbnailComputation =
 		(mediaType === 'image' || mediaType === 'video') && typeof uploadData['jpegThumbnail'] === 'undefined'
@@ -393,11 +410,18 @@ function hasOptionalProperty<T, K extends PropertyKey>(obj: T, key: K): obj is W
 	return typeof obj === 'object' && obj !== null && key in obj && (obj as any)[key] !== null
 }
 
-export const generateWAMessageContent = async (message: any, options: MessageContentGenerationOptions) => {		let m: WAMessageContent = {}
-    const interactive = normalizeToInteractiveMessage(message)
-    if (interactive) {
-        m.interactiveMessage = interactive
-    }
+export const generateWAMessageContent = async (message: any, options: MessageContentGenerationOptions) => {
+	let m: WAMessageContent = {}
+
+	// Normalization: legacy button shapes -> InteractiveMessage.
+	// Uploads media to header if image/video/document present.
+	// Returns immediately so we never fall through to regular image/video branches.
+	const interactive = await normalizeToInteractiveMessage(message, options, prepareWAMessageMedia)
+	if (interactive) {
+		m.interactiveMessage = interactive
+		return WAProto.Message.create(m)
+	}
+
 	if (hasNonNullishProperty(message, 'text')) {
 		const extContent = { text: message.text } as WATextMessage
 
