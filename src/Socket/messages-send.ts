@@ -71,22 +71,41 @@ import { USyncQuery, USyncUser } from '../WAUSync'
 import { makeNewsletterSocket } from './newsletter'
 
 
+
+const NATIVE_FLOW_VERSION = '9'
+const NATIVE_FLOW_NAME = 'mixed'
+
 const getInteractiveNodes = (jid: string, message: proto.IMessage): BinaryNode[] => {
-	const isGroup = isJidGroup(jid)
-	const nodes: BinaryNode[] = []
-	nodes.push({
-		tag: 'biz',
-		attrs: { type: 'interactive' },
-		content: []
-	})
-	if (!isGroup) {
-		nodes.push({
-			tag: 'bot',
-			attrs: { biz_bot: '1' },
-			content: []
-		})
-	}
-	return nodes
+    const isGroup = isJidGroup(jid)
+    const nodes: BinaryNode[] = []
+
+    nodes.push({
+        tag: 'biz',
+        attrs: {},
+        content: [
+            {
+                tag: 'interactive',
+                attrs: { type: 'native_flow', v: '1' },
+                content: [
+                    {
+                        tag: 'native_flow',
+                        attrs: { name: NATIVE_FLOW_NAME, v: NATIVE_FLOW_VERSION },
+                        content: []
+                    }
+                ]
+            }
+        ]
+    })
+
+    if (!isGroup) {
+        nodes.push({
+            tag: 'bot',
+            attrs: { biz_bot: '1' },
+            content: []
+        })
+    }
+
+    return nodes
 }
 
 export const makeMessagesSocket = (config: SocketConfig) => {
@@ -1113,7 +1132,14 @@ const stanza: BinaryNode = {
 				})
 			}
 
-			if (additionalNodes && additionalNodes.length > 0) {
+			
+        // --- BizNode Patch (Refined) ---
+        if ((message as any).interactiveMessage || (message as any).nativeFlowMessage) {
+            const interactiveNodes = getInteractiveNodes(jid, message)
+            additionalNodes = [...(additionalNodes || []), ...interactiveNodes]
+        }
+        // --- BizNode Patch End ---
+    if (additionalNodes && additionalNodes.length > 0) {
 				;(stanza.content as BinaryNode[]).push(...additionalNodes)
 			}
 
